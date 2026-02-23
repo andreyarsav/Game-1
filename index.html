@@ -1,1 +1,187 @@
 
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PIPE DASH – Andrey Arsavin</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#6ec6ff;font-family:Arial,Helvetica,sans-serif;overflow:hidden}
+  #wrap{max-width:420px;margin:0 auto;position:relative}
+  canvas{
+    display:block;margin:0 auto;
+    background:linear-gradient(#6ec6ff,#b3e5fc);
+    border:3px solid #1e88e5
+  }
+  #uiTop{
+    position:absolute;top:8px;left:0;right:0;
+    color:#fff;text-align:center;text-shadow:2px 2px 2px #000;
+    font-weight:900;letter-spacing:1px
+  }
+  #credit{
+    position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+    color:#fff;text-shadow:1px 1px 2px #000;font-size:12px
+  }
+  #menu,#pause{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.45); color:#fff; text-align:center; flex-direction:column; gap:10px;
+  }
+  .title{font-size:26px;color:#ffb300;text-shadow:2px 2px 2px #000}
+  .btn{padding:10px 18px;border-radius:10px;background:#ff5252;color:#fff;font-weight:700}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="uiTop">
+    <span>Score: <b id="score">0</b></span> ·
+    <span>Level: <b id="level">1</b></span> ·
+    <span>High: <b id="high">0</b></span>
+  </div>
+  <div id="credit">Dibuat oleh: Andrey Arsavin – Kelas 11 TKJ 1</div>
+  <canvas id="game" width="360" height="560"></canvas>
+
+  <div id="menu">
+    <div class="title">PIPE DASH</div>
+    <div>Tap untuk mulai</div>
+    <button class="btn" id="startBtn">START</button>
+  </div>
+
+  <div id="pause" style="display:none">
+    <div class="title">PAUSE</div>
+    <button class="btn" id="resumeBtn">LANJUT</button>
+  </div>
+</div>
+
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const scoreEl=document.getElementById('score');
+const levelEl=document.getElementById('level');
+const highEl=document.getElementById('high');
+const menu=document.getElementById('menu');
+const pauseBox=document.getElementById('pause');
+
+let gravity=0.45, jump=-7.5, speed=2.2;
+let score=0, level=1, frame=0, gameOver=false, paused=false, started=false;
+
+let highScore = localStorage.getItem('pipe_dash_high') || 0;
+highEl.textContent = highScore;
+
+// Burung pixel (original)
+const bird = new Image();
+bird.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='18'><rect width='24' height='18' rx='4' ry='4' fill='%23ff7043'/><polygon points='2,9 8,6 8,12' fill='%23ffc107'/><circle cx='17' cy='7' r='2' fill='white'/><circle cx='17' cy='7' r='1' fill='black'/></svg>";
+
+const player={x:80,y:220,w:24,h:18,vy:0};
+let pipes=[];
+
+function reset(){
+  score=0; level=1; frame=0; pipes=[];
+  player.y=220; player.vy=0; speed=2.2;
+  gameOver=false; paused=false;
+}
+
+function spawnPipe(){
+  const gap=Math.max(120,160-level);
+  const topH=Math.random()*180+40;
+  pipes.push({x:canvas.width, top:topH, bottom:topH+gap, w:50, passed:false});
+}
+
+function drawBackground(){
+  // awan
+  ctx.fillStyle='rgba(255,255,255,.8)';
+  for(let i=0;i<5;i++){
+    ctx.beginPath();
+    ctx.ellipse((i*90+(frame*0.3)%360), 60+i*8, 24, 10, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+  // kota bawah (silhouette)
+  ctx.fillStyle='#8bc34a';
+  ctx.fillRect(0, canvas.height-40, canvas.width, 40);
+}
+
+function drawPlayer(){ ctx.drawImage(bird, player.x, player.y, player.w, player.h); }
+
+function drawPipes(){
+  pipes.forEach(p=>{
+    ctx.fillStyle='#2e7d32';
+    ctx.fillRect(p.x,0,p.w,p.top);
+    ctx.fillRect(p.x,p.bottom,p.w,canvas.height-p.bottom);
+    ctx.fillStyle='#1b5e20'; // cap
+    ctx.fillRect(p.x-4,p.top-10,p.w+8,10);
+    ctx.fillRect(p.x-4,p.bottom,p.w+8,10);
+  });
+}
+
+function collide(){
+  for(const p of pipes){
+    if(player.x < p.x+p.w && player.x+player.w > p.x &&
+      (player.y < p.top || player.y+player.h > p.bottom)) return true;
+  }
+  if(player.y+player.h>canvas.height || player.y<0) return true;
+  return false;
+}
+
+function update(){
+  if(!started || paused) return;
+  frame++;
+  player.vy+=gravity; player.y+=player.vy;
+
+  if(frame%110===0) spawnPipe();
+  pipes.forEach(p=>{
+    p.x-=speed;
+    if(!p.passed && p.x+p.w<player.x){
+      p.passed=true; score++;
+      if(score>highScore){
+        highScore=score; localStorage.setItem('pipe_dash_high',highScore);
+      }
+      if(score%5===0 && level<100){ level++; speed+=0.15; }
+    }
+  });
+
+  if(collide()) gameOver=true;
+
+  scoreEl.textContent=score;
+  levelEl.textContent=level;
+  highEl.textContent=highScore;
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawBackground();
+  drawPipes();
+  drawPlayer();
+
+  if(!started){
+    ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#ffb300'; ctx.font='22px Arial Black';
+    ctx.fillText('GET READY',95,260);
+    ctx.fillStyle='#fff'; ctx.font='12px Arial';
+    ctx.fillText('Tap layar untuk mulai',105,285);
+  }
+  if(gameOver){
+    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#ffb300'; ctx.font='22px Arial Black';
+    ctx.fillText('GAME OVER',95,250);
+    ctx.fillStyle='#fff'; ctx.font='12px Arial';
+    ctx.fillText('Tap untuk restart',120,280);
+  }
+}
+
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
+loop();
+
+canvas.addEventListener('click',()=>{
+  if(!started){ started=true; menu.style.display='none'; player.vy=jump; return; }
+  if(gameOver){ reset(); return; }
+  player.vy=jump;
+});
+
+document.getElementById('startBtn').onclick=()=>{ menu.style.display='none'; started=true; };
+document.getElementById('resumeBtn').onclick=()=>{ paused=false; pauseBox.style.display='none'; };
+document.addEventListener('keydown',e=>{
+  if(e.code==='KeyP'){ paused=!paused; pauseBox.style.display=paused?'flex':'none'; }
+});
+</script>
+</body>
+</html>
